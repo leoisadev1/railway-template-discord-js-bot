@@ -1,0 +1,10 @@
+node_modules
+.git
+.env
+.env.*
+.railway
+STATUS.md
+README.md
+*.md
+*.log
+.DS_Store

@@ -1,0 +1,8 @@
+node_modules
+.env
+.env.*
+!.env.example
+.railway
+STATUS.md
+*.log
+.DS_Store
