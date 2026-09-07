@@ -1,29 +1,46 @@
-# Discord.js Bot
+# Deploy and Host Discord.js Bot on Railway
 
-A **current discord.js v14** slash-command worker for Railway. JavaScript first, Node 20+, `package-lock.json` committed, no dummy marketing homepage.
+A **current discord.js v14** slash-command worker. JavaScript first, Node 20+, `package-lock.json` committed, no dummy marketing homepage.
 
 This listing replaces rotting marketplace clones such as [railwayapp-templates/discordjs](https://github.com/railwayapp-templates/discordjs) (`discord.js ^13.6.0`, September 2022, health 0). The image is pinned, slash commands register on boot, and Railway healthchecks hit `/health` so a bad token cannot take the deploy down.
 
 [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/discord-js-bot)
 
-## What you get
+Source: [leoisadev1/railway-template-discord-js-bot](https://github.com/leoisadev1/railway-template-discord-js-bot)
+
+## About Hosting Discord.js Bot
+
+Railway runs a single worker that logs into the Discord gateway and serves a tiny `/health` JSON endpoint for deploys. There is no public website to configure. Paste `DISCORD_TOKEN` at deploy time, invite the bot, and slash commands (`/ping`, `/help`) register on `ClientReady`.
+
+### What you get
 
 - **discord.js 14.27.0** (current stable; v15 is still pre-release)
 - **Node 22.23.2 Alpine**, engines `>=20`
-- Slash-command scaffold: drop a file in `src/commands/` (`/ping`, `/help` included)
-- Worker process with a tiny `/health` JSON endpoint for Railway healthchecks
+- Slash-command scaffold: drop a file in `src/commands/`
+- Worker process with `/health` for Railway healthchecks
 - Required `DISCORD_TOKEN` (you paste a real bot token; nothing is generated)
 
-## One-click deploy
+## Why Deploy Discord.js Bot on Railway?
 
-1. Click **Deploy on Railway**.
-2. Paste your Discord bot token into **DISCORD_TOKEN** (required).
-3. Deploy. Railway builds the Dockerfile, starts the worker, and waits for `/health` → `200`.
-4. Invite the bot to a server (see below). Slash commands appear after the first successful login.
+Railway keeps the gateway worker running, injects `PORT` for healthchecks, and rebuilds from the pinned Dockerfile when you push. You do not manage Node, Docker, or a VPS. Vertical scaling is one click if the bot grows.
 
-No volume. No extra services. One worker.
+Rotting clones die on invalid tokens and ship discord.js 13. This template stays `SUCCESS` via `/health`, pins 14.27.0, and treats `DISCORD_TOKEN` as a required secret.
 
-## Variables
+## Common Use Cases
+
+- One-click slash-command Discord bot for a community server
+- Starter for moderation, welcome, or utility commands in JavaScript
+- Always-on discord.js worker without a dummy HTTP marketing site
+
+## Dependencies for Discord.js Bot Hosting
+
+### Deployment Dependencies
+
+- A [Discord application](https://discord.com/developers/applications) with a **Bot** token
+- OAuth2 invite with scopes `bot` and `applications.commands`
+- No volume, no database, no extra Railway services
+
+### Variables
 
 | Name | Required | Generated | Notes |
 | --- | --- | --- | --- |
@@ -32,7 +49,7 @@ No volume. No extra services. One worker.
 
 There are no generated secrets. Do not bake a dummy token into the service.
 
-## Ports, volumes, health
+### Ports, volumes, health
 
 | | |
 | --- | --- |
@@ -42,6 +59,13 @@ There are no generated secrets. Do not bake a dummy token into the service.
 | Restart | On failure, up to 10 retries |
 
 A public domain is optional and only useful if you want to curl `/health` yourself.
+
+## One-click deploy
+
+1. Click **Deploy on Railway**.
+2. Paste your Discord bot token into **DISCORD_TOKEN** (required).
+3. Deploy. Railway builds the Dockerfile, starts the worker, and waits for `/health` → `200`.
+4. Invite the bot to a server (see below). Slash commands appear after the first successful login.
 
 ## Create a bot token and invite it
 
