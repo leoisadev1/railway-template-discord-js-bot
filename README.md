@@ -4,7 +4,7 @@ A **current discord.js v14** slash-command worker. JavaScript first, Node 20+, `
 
 This listing replaces rotting marketplace clones such as [railwayapp-templates/discordjs](https://github.com/railwayapp-templates/discordjs) (`discord.js ^13.6.0`, September 2022, health 0). The image is pinned, slash commands register on boot, and Railway healthchecks hit `/health` so a bad token cannot take the deploy down.
 
-[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/discord-js-bot)
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/discordjs-bot)
 
 Source: [leoisadev1/railway-template-discord-js-bot](https://github.com/leoisadev1/railway-template-discord-js-bot)
 
