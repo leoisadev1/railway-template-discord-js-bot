@@ -5,10 +5,11 @@
   "description": "Current discord.js slash-command worker for Railway",
   "main": "src/index.js",
   "scripts": {
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "test": "node --test"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=24 <25"
   },
   "dependencies": {
     "discord.js": "14.27.0"

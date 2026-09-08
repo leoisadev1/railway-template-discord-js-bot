@@ -9,10 +9,13 @@ function loadCommands() {
 
   for (const file of files) {
     const command = require(path.join(dir, file));
-    if (!command?.data?.name || typeof command.execute !== "function") {
-      console.warn(`Skipping ${file}: missing data.name or execute()`);
-      continue;
+    if (!command?.data?.name || typeof command.data.toJSON !== "function" || typeof command.execute !== "function") {
+      throw new Error(`Invalid command ${file}: expected data.toJSON() and execute()`);
     }
+    if (commands.has(command.data.name)) {
+      throw new Error(`Duplicate command: ${command.data.name}`);
+    }
+    command.data.toJSON();
     commands.set(command.data.name, command);
   }
 

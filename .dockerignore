@@ -3,6 +3,9 @@ node_modules
 .env
 .env.*
 .railway
+.audit-work
+tests
+proposed-config.json
 STATUS.md
 README.md
 *.md

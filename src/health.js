@@ -1,30 +1,23 @@
 const http = require("node:http");
 
-function startHealthServer(getStatus) {
-  const port = Number.parseInt(process.env.PORT || "3000", 10);
-
-  const server = http.createServer((req, res) => {
-    const url = req.url?.split("?")[0] || "/";
-    if (url !== "/health" && url !== "/") {
+function createHealthServer(getStatus) {
+  return http.createServer((req, res) => {
+    const path = req.url?.split("?")[0] || "/";
+    if (req.method !== "GET" || !["/", "/health", "/healthz", "/ready", "/live"].includes(path)) {
       res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
       res.end("Not Found");
       return;
     }
-
-    const body = JSON.stringify({
-      ok: true,
-      service: "discord-js-bot",
-      ...getStatus(),
+    const status = getStatus();
+    const ok = path === "/live" ? status.live : status.ready;
+    const body = JSON.stringify({ ...status, ok, service: "discord-js-bot" });
+    res.writeHead(ok ? 200 : 503, {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      "content-length": Buffer.byteLength(body),
     });
-    res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
     res.end(body);
   });
-
-  server.listen(port, "0.0.0.0", () => {
-    console.log(`Healthcheck listening on 0.0.0.0:${port}/health`);
-  });
-
-  return server;
 }
 
-module.exports = { startHealthServer };
+module.exports = { createHealthServer };
