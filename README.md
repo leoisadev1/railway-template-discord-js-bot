@@ -21,8 +21,9 @@ The service uses Node 24 LTS and a digest-pinned Alpine image, runs as the non-r
 - `DISCORD_TOKEN`: required, user supplied, with no default. Keep it out of source control and logs.
 - `PORT`: internal health listener, default `3000`. `HOST` defaults to `0.0.0.0` inside the container. No public HTTP interactions endpoint is implemented.
 - `/health`, `/healthz`, `/ready`, and `/` report readiness only when both command registration and the gateway are ready; otherwise they return 503.
-- `/live` is process liveness, not bot readiness. Railway uses `/health` with a 60-second startup allowance and an on-failure restart policy.
-- Gateway disconnect/reconnect events affect readiness. A deployment healthcheck is not continuous provider-outage monitoring. Missing credentials, startup failures, and timeouts exit rather than leaving a healthy HTTP-only worker.
+- `/live` is process liveness, not bot readiness. Railway's deployment health check uses `/live` with a 60-second allowance and an on-failure restart policy, so a deployment goes live once the process is up, before Discord login finishes.
+- Gateway disconnect/reconnect events affect readiness. A deployment healthcheck is not continuous provider-outage monitoring.
+- A missing `DISCORD_TOKEN`, or one Discord rejects at login (HTTP 401 on gateway discovery or close code 4004 on identify), does not crash-loop: the bot stays idle, `/health` returns 503 with `"discord": "needs_configuration"`, and the deploy log says where to get the Bot token. Setting the variable redeploys the service. Other startup failures (command registration, gateway timeouts) exit nonzero and Railway restarts the bot.
 
 ### Commands and maintenance
 

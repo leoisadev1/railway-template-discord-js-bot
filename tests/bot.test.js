@@ -130,6 +130,22 @@ test("rejected credentials, failed registration and gateway timeout cannot be gr
   }
 });
 
+test("a rejected token keeps its TokenInvalid code, from discovery (401) or from the gateway (close 4004)", async (t) => {
+  const { DiscordjsError, DiscordjsErrorCodes } = require("discord.js");
+  const discovery = fixture(t);
+  discovery.client.login = async () => { throw new DiscordjsError(DiscordjsErrorCodes.TokenInvalid); };
+  await assert.rejects(discovery.app.start(), (error) => error.code === "TokenInvalid");
+  const gateway = fixture(t);
+  gateway.client.login = async () => {
+    gateway.client.emit(Events.ShardDisconnect, { code: 4004 }, 0);
+    throw new Error("Authentication failed");
+  };
+  await assert.rejects(gateway.app.start(), (error) => error.code === "TokenInvalid");
+  const outage = fixture(t, { startupTimeoutMs: 25 });
+  outage.client.login = async () => { outage.client.emit(Events.ShardDisconnect, { code: 1006 }, 0); throw new Error("socket hang up"); };
+  await assert.rejects(outage.app.start(), (error) => error.code === undefined);
+});
+
 test("HTTP bind failure closes the gateway client", async (t) => {
   const owner = fixture(t).app;
   await owner.start();
@@ -211,15 +227,51 @@ async function childResult(args, env = {}) {
   return { code, signal, output: output.join("") };
 }
 
-test("real CLI exits nonzero for missing and mocked provider-rejected credentials", async () => {
-  const missing = await childResult(["src/index.js"]);
-  assert.equal(missing.code, 1);
-  assert.match(missing.output, /DISCORD_TOKEN is required/);
-  const invalid = await childResult(["--require", "./tests/provider.cjs", "src/index.js"], {
-    DISCORD_TOKEN: "synthetic-invalid", TEST_PROVIDER_MODE: "invalid",
+async function idleChild(t, env) {
+  const child = spawn(process.execPath, ["--require", "./tests/provider.cjs", "src/index.js"], {
+    cwd: require("node:path").join(__dirname, ".."),
+    env: { PATH: process.env.PATH, HOST: host, PORT: "0", ...env },
+    stdio: ["ignore", "pipe", "pipe"],
   });
-  assert.equal(invalid.code, 1);
-  assert.match(invalid.output, /login\/readiness failed/);
+  const timer = setTimeout(() => child.kill("SIGKILL"), 5000);
+  t.after(() => { clearTimeout(timer); if (child.exitCode === null) child.kill("SIGKILL"); });
+  const output = [];
+  child.stderr.on("data", (data) => output.push(data.toString()));
+  const port = await new Promise((resolve, reject) => {
+    child.stdout.on("data", (data) => {
+      const match = /Healthcheck listening on (\d+) \(idle\)/.exec(data.toString());
+      if (match) resolve(Number(match[1]));
+    });
+    child.once("exit", (code) => reject(new Error(`exited ${code}: ${output.join("")}`)));
+  });
+  return { child, port, output, exited: once(child, "exit") };
+}
+
+for (const [label, env, reason] of [
+  ["missing", {}, "TokenMissing"],
+  ["provider-rejected", { DISCORD_TOKEN: "synthetic-invalid", TEST_PROVIDER_MODE: "invalid" }, "TokenInvalid"],
+]) {
+  test(`real CLI idles with liveness up and a token hint for ${label} credentials`, async (t) => {
+    const { child, port, output, exited } = await idleChild(t, env);
+    const live = await fetch(`http://${host}:${port}/live`);
+    assert.equal(live.status, 200);
+    const health = await fetch(`http://${host}:${port}/health`);
+    assert.equal(health.status, 503);
+    assert.deepEqual(await health.json(), { ready: false, live: true, discord: "needs_configuration", reason,
+      commands: 0, commandsRegistered: false, ok: false, service: "discord-js-bot" });
+    assert.match(output.join(""), /The bot is idle and not connected to Discord\. In the Discord Developer Portal/);
+    assert.doesNotMatch(output.join(""), /synthetic-invalid/);
+    child.kill("SIGTERM");
+    assert.deepEqual(await exited, [0, null]);
+  });
+}
+
+test("real CLI still exits nonzero for a gateway outage, so Railway restarts it", async () => {
+  const outage = await childResult(["--require", "./tests/provider.cjs", "src/index.js"], {
+    DISCORD_TOKEN: "synthetic-valid", TEST_PROVIDER_MODE: "outage",
+  });
+  assert.equal(outage.code, 1);
+  assert.match(outage.output, /login\/readiness failed/);
 });
 
 for (const signal of ["SIGTERM", "SIGINT"]) {

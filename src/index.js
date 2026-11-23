@@ -2,6 +2,7 @@ const { once } = require("node:events");
 const {
   Client,
   Events,
+  GatewayCloseCodes,
   GatewayIntentBits,
   MessageFlags,
   REST,
@@ -49,6 +50,7 @@ function createBot({
   let stopping = false;
   let phase = "starting";
   let stopPromise;
+  let authenticationFailed = false;
   const disconnected = new Set();
   const startup = new AbortController();
   client.commands = commands;
@@ -70,7 +72,12 @@ function createBot({
     handleInteraction(interaction, commands, logger),
   );
   client.on(Events.Error, () => logger.error("Discord client error"));
-  client.on(Events.ShardDisconnect, (_event, id) => disconnected.add(id));
+  client.on(Events.ShardDisconnect, (event, id) => {
+    disconnected.add(id);
+    // 4004: the gateway refused IDENTIFY, so the token was revoked or reset after /gateway/bot
+    // accepted it; discord.js then rejects login() with an uncoded "Authentication failed".
+    if (event?.code === GatewayCloseCodes.AuthenticationFailed) authenticationFailed = true;
+  });
   client.on(Events.ShardReconnecting, (id) => disconnected.add(id));
   client.on(Events.ShardReady, (id) => disconnected.delete(id));
   client.on(Events.ShardResume, (id) => disconnected.delete(id));
@@ -106,7 +113,7 @@ function createBot({
     let abortStartup;
     try {
       startup.signal.throwIfAborted();
-      if (!token.trim()) throw new Error("DISCORD_TOKEN is required");
+      if (!token.trim()) throw Object.assign(new Error("DISCORD_TOKEN is required"), { code: "TokenMissing" });
       if (!Number.isInteger(port) || port < 0 || port > 65535) {
         throw new Error("PORT must be an integer between 0 and 65535");
       }
@@ -138,8 +145,15 @@ function createBot({
         : phase === "registering_commands" ? "Discord command registration failed; check application permissions and connectivity"
           : "Discord login/readiness failed; check DISCORD_TOKEN and gateway connectivity";
       phase = "failed";
-      await stop();
-      throw new Error(message);
+      // Keep discord.js's verdict on the token so main() can tell configuration from outages, even
+      // when the shutdown itself times out.
+      const code = authenticationFailed ? "TokenInvalid" : error?.code;
+      try {
+        await stop();
+      } catch (stopError) {
+        logger.error(stopError.message);
+      }
+      throw Object.assign(new Error(message), { code });
     } finally {
       clearTimeout(timer);
       if (abortStartup) startup.signal.removeEventListener("abort", abortStartup);
@@ -149,9 +163,33 @@ function createBot({
   return { start, stop, status, server, client };
 }
 
+// Configuration a restart cannot fix. The bot idles with /live up instead of crash-looping,
+// so the deployment stays reachable and the log says what to change.
+const NEEDS_CONFIGURATION = {
+  TokenMissing: "DISCORD_TOKEN is not set.",
+  TokenInvalid: "Discord rejected DISCORD_TOKEN.",
+};
+const TOKEN_HELP = "In the Discord Developer Portal open your application, go to Bot, press Reset Token and set the "
+  + "new token as DISCORD_TOKEN on this Railway service (not the application ID, public key or client secret). "
+  + "Railway redeploys the service when the variable changes.";
+
+function startIdle({ reason, port = Number(process.env.PORT || "3000"), host = process.env.HOST || "0.0.0.0", logger = console }) {
+  const server = createHealthServer(() => ({
+    ready: false, live: true, discord: "needs_configuration", reason, commands: 0, commandsRegistered: false,
+  }));
+  server.listen(port, host);
+  logger.error(`${NEEDS_CONFIGURATION[reason]} The bot is idle and not connected to Discord. ${TOKEN_HELP}`);
+  return server;
+}
+
 async function main() {
   const app = createBot();
-  const shutdown = (code) => app.stop().then(
+  let idle;
+  // Idle means the bot was already stopped (its shutdown error, if any, was logged then).
+  const shutdown = (code) => (idle
+    ? new Promise((resolve) => { idle.close(resolve); idle.closeAllConnections(); })
+    : app.stop()
+  ).then(
     () => process.exit(code),
     (error) => { console.error(error.message); process.exit(1); },
   );
@@ -161,7 +199,14 @@ async function main() {
     console.error("Unhandled rejection; stopping the bot");
     shutdown(1);
   });
-  await app.start();
+  try {
+    await app.start();
+  } catch (error) {
+    if (!Object.hasOwn(NEEDS_CONFIGURATION, error.code ?? "")) throw error;
+    idle = startIdle({ reason: error.code });
+    await once(idle, "listening");
+    console.log(`Healthcheck listening on ${idle.address().port} (idle)`);
+  }
 }
 
 if (require.main === module) {
@@ -171,4 +216,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { createBot, handleInteraction };
+module.exports = { createBot, handleInteraction, startIdle };
