@@ -1,6 +1,6 @@
 # Deploy and Host Discord.js Bot on Railway
 
-A JavaScript Discord gateway worker with discord.js 14.27.0, `/ping` and `/help`, locked dependencies, and separate readiness/liveness endpoints. This is not a website: no public domain, database, or volume is required.
+A JavaScript Discord gateway worker with discord.js 14.28.1, `/ping` and `/help`, locked dependencies, and separate readiness/liveness endpoints. This is not a website: no public domain, database, or volume is required.
 
 ## About Hosting Discord.js Bot
 
